@@ -2,25 +2,39 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use LogicException;
 
-#[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     /**
-     * Get the attributes that should be cast.
+     * Fields allowed for mass assignment.
      *
-     * @return array<string, string>
+     * Controllers must still validate and authorize
+     * which fields users are allowed to change.
+     */
+    protected $fillable = [
+        'username',
+        'name',
+        'email',
+        'contact_no',
+        'password',
+    ];
+
+    /**
+     * Hide sensitive fields from JSON responses.
+     */
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    /**
+     * Automatically cast and hash attributes.
      */
     protected function casts(): array
     {
@@ -28,5 +42,33 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Model lifecycle events.
+     */
+    protected static function booted(): void
+    {
+        /**
+         * Set the default name to the username
+         * when a new user is created.
+         */
+        static::creating(function (User $user): void {
+            if (blank($user->name)) {
+                $user->name = $user->username;
+            }
+        });
+
+        /**
+         * Prevent changing the username
+         * after the account is created.
+         */
+        static::updating(function (User $user): void {
+            if ($user->isDirty('username')) {
+                throw new LogicException(
+                    'Username cannot be changed after account creation.'
+                );
+            }
+        });
     }
 }
