@@ -284,13 +284,9 @@ class UserController extends Controller
     /**
      * Format safe user details.
      */
+
     private function formatUser(User $user): array
     {
-        $user->loadMissing([
-            'roles.permissions',
-            'permissions',
-        ]);
-
         $isSuperAdmin = $user->hasRole(
             'Super Admin',
             'web'
@@ -303,21 +299,9 @@ class UserController extends Controller
             'email' => $user->email,
             'contact_no' => $user->contact_no,
 
-            'roles' => $user->roles
-                ->map(fn(Role $role) => [
-                    'id' => $role->id,
-                    'name' => $role->name,
-                ])
-                ->values()
-                ->all(),
+            'roles' => $user->getRoleNames()->values(),
 
-            'direct_permissions' => $user->permissions
-                ->pluck('name')
-                ->sort()
-                ->values()
-                ->all(),
-
-            'effective_permissions' => $isSuperAdmin
+            'permissions' => $isSuperAdmin
                 ? ['*']
                 : $user->getAllPermissions()
                 ->pluck('name')
@@ -326,8 +310,6 @@ class UserController extends Controller
                 ->all(),
 
             'is_super_admin' => $isSuperAdmin,
-            'created_at' => $user->created_at,
-            'updated_at' => $user->updated_at,
         ];
     }
 }
