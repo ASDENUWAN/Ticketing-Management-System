@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-deep: #4e0205;
+  --color-brand: #8a0007;
+  --color-brand-gold: #f7aa37;
+  --color-app-bg: #f8fafc;
+}
+
 :root {
   font-family:
     Inter,
@@ -18,4 +25,17 @@
 body {
   margin: 0;
   min-width: 320px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
 }
