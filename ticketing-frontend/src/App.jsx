@@ -3,8 +3,14 @@ import { Navigate, Route, Routes } from "react-router";
 import { useAuth } from "./context/AuthContext";
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import PermissionRoute from "./components/PermissionRoute";
+
+import DashboardLayout from "./layouts/DashboardLayout";
+
 import LoginPage from "./features/auth/LoginPage";
 import DashboardPage from "./features/dashboard/DashboardPage";
+import ProfilePage from "./features/profile/ProfilePage";
+import ModulePlaceholder from "./features/shared/ModulePlaceholder";
 
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
@@ -27,6 +33,7 @@ function GuestRoute({ children }) {
 export default function App() {
   return (
     <Routes>
+      {/* Public login */}
       <Route
         path="/login"
         element={
@@ -36,8 +43,49 @@ export default function App() {
         }
       />
 
+      {/* Protected application */}
       <Route element={<ProtectedRoute />}>
-        <Route path="/" element={<DashboardPage />} />
+        <Route element={<DashboardLayout />}>
+          <Route index element={<DashboardPage />} />
+
+          <Route path="profile" element={<ProfilePage />} />
+
+          <Route
+            path="users"
+            element={
+              <PermissionRoute permission="users.view">
+                <ModulePlaceholder
+                  title="User Management"
+                  description="User management screens will be connected to the existing Laravel user APIs in the next frontend step."
+                />
+              </PermissionRoute>
+            }
+          />
+
+          <Route
+            path="roles"
+            element={
+              <PermissionRoute permission="roles.view">
+                <ModulePlaceholder
+                  title="Role Management"
+                  description="Dynamic role creation, editing, and permission assignment interfaces will be implemented here."
+                />
+              </PermissionRoute>
+            }
+          />
+
+          <Route
+            path="permissions"
+            element={
+              <PermissionRoute permission="permissions.view">
+                <ModulePlaceholder
+                  title="Permission Management"
+                  description="Dynamic permission creation and management interfaces will be implemented here."
+                />
+              </PermissionRoute>
+            }
+          />
+        </Route>
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
