@@ -16,6 +16,7 @@ import {
 
 import { useAuth } from "../../context/AuthContext";
 import { can } from "../../utils/permissions";
+import useTimedMessage from "../../hooks/useTimedMessage";
 
 import UserFormDialog from "./UserFormDialog";
 import UserAccessDialog from "./UserAccessDialog";
@@ -23,7 +24,6 @@ import DeleteUserDialog from "./DeleteUserDialog";
 
 import { usersApi, apiErrorMessage } from "./usersApi";
 
-// Display the user's assigned roles.
 function RoleBadges({ roles = [] }) {
   if (!roles.length) {
     return <span className="text-xs text-slate-400">No roles</span>;
@@ -44,74 +44,6 @@ function RoleBadges({ roles = [] }) {
         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
           +{roles.length - 2}
         </span>
-      )}
-    </div>
-  );
-}
-
-// Reusable action buttons for desktop and mobile.
-function UserActions({ target, actor, onEdit, onAccess, onDelete }) {
-  const protectedAccount =
-    target.is_super_admin || Number(target.id) === Number(actor?.id);
-
-  const canEdit = !protectedAccount && can(actor, "users.update");
-
-  const canDelete = !protectedAccount && can(actor, "users.delete");
-
-  const canAssignRoles = can(actor, "roles.assign") && can(actor, "roles.view");
-
-  const canAssignPermissions =
-    can(actor, "permissions.assign") && can(actor, "permissions.view");
-
-  const canManageAccess = canEdit && (canAssignRoles || canAssignPermissions);
-
-  if (!canEdit && !canDelete) {
-    return (
-      <span className="text-xs text-slate-400">
-        {protectedAccount ? "Protected" : "View only"}
-      </span>
-    );
-  }
-
-  const buttonClass =
-    "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-brand";
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {canEdit && (
-        <button
-          type="button"
-          onClick={() => onEdit(target)}
-          className={buttonClass}
-          aria-label={`Edit ${target.username}`}
-        >
-          <Pencil size={15} />
-          Edit
-        </button>
-      )}
-
-      {canManageAccess && (
-        <button
-          type="button"
-          onClick={() => onAccess(target)}
-          className={buttonClass}
-          aria-label={`Manage access for ${target.username}`}
-        >
-          <KeyRound size={15} />
-          Access
-        </button>
-      )}
-
-      {canDelete && (
-        <button
-          type="button"
-          onClick={() => onDelete(target)}
-          className={`${buttonClass} hover:border-red-200 hover:bg-red-50 hover:text-red-700`}
-          aria-label={`Delete ${target.username}`}
-        >
-          <Trash2 size={15} />
-          Delete
-        </button>
       )}
     </div>
   );
@@ -143,8 +75,79 @@ function UserIdentity({ user }) {
   );
 }
 
+function UserActions({ target, actor, onEdit, onAccess, onDelete }) {
+  const protectedAccount =
+    target.is_super_admin || Number(target.id) === Number(actor?.id);
+
+  const actorPermissions = new Set(actor?.permissions ?? []);
+
+  const targetPermissions = target.effective_permissions ?? [];
+
+  const manageable =
+    actor?.is_super_admin ||
+    targetPermissions.every((permission) => actorPermissions.has(permission));
+
+  const canEdit = !protectedAccount && manageable && can(actor, "users.update");
+
+  const canDelete =
+    !protectedAccount && manageable && can(actor, "users.delete");
+
+  const canManageAccess =
+    canEdit &&
+    ((can(actor, "roles.assign") && can(actor, "roles.view")) ||
+      (can(actor, "permissions.assign") && can(actor, "permissions.view")));
+
+  if (!canEdit && !canDelete) {
+    return (
+      <span className="text-xs text-slate-400">
+        {protectedAccount ? "Protected" : "View only"}
+      </span>
+    );
+  }
+
+  const actionClass =
+    "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-brand";
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {canEdit && (
+        <button
+          type="button"
+          onClick={() => onEdit(target)}
+          className={actionClass}
+        >
+          <Pencil size={15} />
+          Edit
+        </button>
+      )}
+
+      {canManageAccess && (
+        <button
+          type="button"
+          onClick={() => onAccess(target)}
+          className={actionClass}
+        >
+          <KeyRound size={15} />
+          Access
+        </button>
+      )}
+
+      {canDelete && (
+        <button
+          type="button"
+          onClick={() => onDelete(target)}
+          className={`${actionClass} hover:border-red-200 hover:bg-red-50 hover:text-red-700`}
+        >
+          <Trash2 size={15} />
+          Delete
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function UsersPage() {
-  const { user: actor } = useAuth();
+  const { user: actor, refreshUser } = useAuth();
 
   const [users, setUsers] = useState([]);
 
@@ -156,34 +159,39 @@ export default function UsersPage() {
   });
 
   const [page, setPage] = useState(1);
+
   const [search, setSearch] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
 
-  // { type: "form" | "access" | "delete", user }
   const [dialog, setDialog] = useState(null);
 
-  // Debounced server-side search.
+  const notice = useTimedMessage();
+  const errorNotice = useTimedMessage();
+
+  /**
+   * Debounce search.
+   */
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timeout = setTimeout(() => {
       setPage(1);
       setSearchTerm(search.trim());
     }, 350);
 
-    return () => clearTimeout(timer);
+    return () => clearTimeout(timeout);
   }, [search]);
 
-  // Load users from Laravel.
+  /**
+   * Load fresh user information.
+   */
   useEffect(() => {
     const controller = new AbortController();
 
     async function loadUsers() {
       setLoading(true);
-      setError("");
+      errorNotice.clear();
 
       try {
         const response = await usersApi.list({
@@ -194,12 +202,28 @@ export default function UsersPage() {
 
         if (controller.signal.aborted) return;
 
+        const newMeta = response.meta ?? {
+          current_page: 1,
+          last_page: 1,
+          per_page: 20,
+          total: 0,
+        };
+
+        if (page > 1 && page > newMeta.last_page) {
+          setPage(newMeta.last_page);
+          return;
+        }
+
         setUsers(response.data ?? []);
-        setMeta(response.meta);
-      } catch (err) {
+        setMeta(newMeta);
+      } catch (error) {
         if (controller.signal.aborted) return;
 
-        setError(apiErrorMessage(err, "Unable to load the user list."));
+        setUsers([]);
+
+        errorNotice.show(
+          apiErrorMessage(error, "Unable to load the user list."),
+        );
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -212,46 +236,56 @@ export default function UsersPage() {
     return () => controller.abort();
   }, [page, searchTerm, refresh]);
 
-  function reload(message) {
-    if (message) setNotice(message);
-    setRefresh((value) => value + 1);
+  /**
+   * Refresh table and authenticated permissions.
+   */
+  function reload(message = "") {
+    if (message) {
+      notice.show(message);
+    }
+
+    setRefresh((current) => current + 1);
+    refreshUser();
   }
 
-  function onDeleted() {
-    setNotice("User deleted successfully.");
+  function handleDeleted() {
+    notice.show("User deleted successfully.");
 
     if (users.length === 1 && page > 1) {
       setPage((current) => current - 1);
     } else {
-      reload();
+      setRefresh((current) => current + 1);
     }
+
+    refreshUser();
   }
 
-  const canCreate = can(actor, "users.create");
+  const from = meta.total ? (meta.current_page - 1) * meta.per_page + 1 : 0;
 
-  const from = meta.total > 0 ? (meta.current_page - 1) * meta.per_page + 1 : 0;
-
-  const to = meta.total > 0 ? Math.min(from + users.length - 1, meta.total) : 0;
+  const to = meta.total ? Math.min(from + users.length - 1, meta.total) : 0;
 
   return (
     <div className="space-y-6">
-      {/* PAGE HEADER */}
+      {/* PAGE HEADING */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            User Management
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight">User Management</h1>
 
-          <p className="mt-1 text-sm leading-6 text-slate-500">
+          <p className="mt-1 text-sm text-slate-500">
             Manage CITS Desk user accounts and access.
           </p>
         </div>
 
-        {canCreate && (
+        {can(actor, "users.create") && (
           <button
             type="button"
-            onClick={() => setDialog({ type: "form", user: null })}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            onClick={() =>
+              setDialog({
+                type: "form",
+                user: null,
+              })
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-deep"
           >
             <Plus size={18} />
             Add user
@@ -259,7 +293,7 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* SUMMARY */}
+      {/* SUMMARY CARDS */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="rounded-xl bg-red-50 p-3 text-brand">
@@ -267,7 +301,7 @@ export default function UsersPage() {
           </div>
 
           <div>
-            <p className="text-xs font-medium text-slate-500">
+            <p className="text-xs text-slate-500">
               {searchTerm ? "Matching users" : "Total users"}
             </p>
 
@@ -281,30 +315,26 @@ export default function UsersPage() {
           </div>
 
           <div>
-            <p className="text-xs font-medium text-slate-500">
-              Access management
-            </p>
+            <p className="text-xs text-slate-500">Access management</p>
 
-            <p className="mt-1 text-sm font-semibold text-slate-900">
-              Role-based permissions
-            </p>
+            <p className="mt-1 text-sm font-semibold">Role-based permissions</p>
 
             <p className="text-xs text-slate-500">Controlled by Laravel</p>
           </div>
         </div>
       </div>
 
-      {/* FEEDBACK */}
-      {notice && (
+      {/* NOTIFICATIONS */}
+      {notice.message && (
         <div
           role="status"
-          className="flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
         >
-          <span>{notice}</span>
+          <span>{notice.message}</span>
 
           <button
             type="button"
-            onClick={() => setNotice("")}
+            onClick={notice.clear}
             className="font-medium underline"
           >
             Dismiss
@@ -312,18 +342,26 @@ export default function UsersPage() {
         </div>
       )}
 
-      {error && (
+      {errorNotice.message && (
         <div
           role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
         >
-          {error}
+          <span>{errorNotice.message}</span>
+
+          <button
+            type="button"
+            onClick={errorNotice.clear}
+            className="font-medium underline"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
       {/* USER LIST */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {/* Search toolbar */}
+        {/* SEARCH */}
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="relative w-full max-w-md">
             <Search
@@ -336,9 +374,9 @@ export default function UsersPage() {
               aria-label="Search users"
               placeholder="Search name, username, email..."
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
               maxLength={100}
-              className="w-full rounded-xl border border-slate-300 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-red-100"
+              onChange={(event) => setSearch(event.target.value)}
+              className="w-full rounded-xl border border-slate-300 py-3 pl-11 pr-4 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-red-100"
             />
           </div>
 
@@ -368,12 +406,12 @@ export default function UsersPage() {
               <UserRound size={30} />
             </div>
 
-            <h3 className="mt-4 font-semibold">No users found</h3>
+            <h3 className="mt-4 font-semibold">
+              {errorNotice.message ? "Unable to load users" : "No users found"}
+            </h3>
 
-            <p className="mt-2 max-w-sm text-sm text-slate-500">
-              {searchTerm
-                ? "Try searching with another name or username."
-                : "There are no user accounts to display."}
+            <p className="mt-2 text-sm text-slate-500">
+              Try another search or refresh the page.
             </p>
           </div>
         ) : (
@@ -452,11 +490,11 @@ export default function UsersPage() {
 
                   <div className="space-y-2 text-sm">
                     <p className="break-all text-slate-600">
-                      {user.email || "No email provided"}
+                      {user.email || "No email"}
                     </p>
 
                     <p className="text-slate-500">
-                      {user.contact_no || "No contact number"}
+                      {user.contact_no || "No contact"}
                     </p>
                   </div>
 
@@ -503,7 +541,7 @@ export default function UsersPage() {
                 aria-label="Previous page"
                 disabled={page <= 1}
                 onClick={() => setPage((value) => value - 1)}
-                className="rounded-lg border border-slate-200 p-2.5 text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                className="rounded-lg border border-slate-200 p-2.5 disabled:opacity-40"
               >
                 <ChevronLeft size={18} />
               </button>
@@ -517,7 +555,7 @@ export default function UsersPage() {
                 aria-label="Next page"
                 disabled={page >= meta.last_page}
                 onClick={() => setPage((value) => value + 1)}
-                className="rounded-lg border border-slate-200 p-2.5 text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                className="rounded-lg border border-slate-200 p-2.5 disabled:opacity-40"
               >
                 <ChevronRight size={18} />
               </button>
@@ -548,7 +586,7 @@ export default function UsersPage() {
         <DeleteUserDialog
           user={dialog.user}
           onClose={() => setDialog(null)}
-          onDeleted={onDeleted}
+          onDeleted={handleDeleted}
         />
       )}
     </div>

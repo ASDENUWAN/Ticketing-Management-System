@@ -14,6 +14,7 @@ import {
 
 import { useAuth } from "../../context/AuthContext";
 import UniversityMark from "../../components/UniversityMark";
+import useTimedMessage from "../../hooks/useTimedMessage";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -21,18 +22,19 @@ export default function LoginPage() {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+
   const [showPassword, setShowPassword] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
 
-  const [error, setError] = useState("");
+  const errorNotice = useTimedMessage();
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setError("");
+    errorNotice.clear();
 
     if (!username.trim() || !password) {
-      setError("Enter your username and password.");
+      errorNotice.show("Enter your username and password.");
       return;
     }
 
@@ -46,14 +48,14 @@ export default function LoginPage() {
       const status = err.response?.status;
 
       if (status === 422 || status === 401) {
-        setError("Invalid username or password.");
+        errorNotice.show("Invalid username or password.");
       } else if (status === 429) {
-        setError("Too many login attempts. Please try again later.");
+        errorNotice.show("Too many login attempts. Please try again later.");
       } else if (status === 419) {
-        setError("Your session expired. Please try signing in again.");
+        errorNotice.show("Your session expired. Please try signing in again.");
       } else {
-        setError(
-          "Unable to sign in. Please check your connection and try again.",
+        errorNotice.show(
+          "Unable to sign in. Check your connection and try again.",
         );
       }
     } finally {
@@ -64,12 +66,12 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-app-bg lg:grid lg:grid-cols-2">
       {/* LEFT BRANDING PANEL */}
-      <section className="relative hidden min-h-screen overflow-hidden bg-gradient-to-br from-brand-deep via-[#680609] to-brand lg:flex lg:flex-col lg:justify-between p-12 xl:p-16">
-        {/* Decorative shapes */}
+      <section className="relative hidden min-h-screen overflow-hidden bg-gradient-to-br from-brand-deep via-[#680609] to-brand p-12 lg:flex lg:flex-col lg:justify-between xl:p-16">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-36 -top-36 h-96 w-96 rounded-full border border-white/15"
         />
+
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -bottom-40 -left-40 h-[430px] w-[430px] rounded-full border border-white/10"
@@ -82,6 +84,7 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold tracking-tight text-white">
               USJ CITS Desk
             </h1>
+
             <p className="mt-1 text-sm text-white/70">
               University Systems Support Portal
             </p>
@@ -107,6 +110,7 @@ export default function LoginPage() {
           <div className="mt-10 grid max-w-lg gap-3">
             {[
               "Organized issue tracking",
+              "Role-based access management",
               "Secure university system support",
             ].map((item) => (
               <div
@@ -122,6 +126,7 @@ export default function LoginPage() {
 
         <div className="relative border-t border-white/15 pt-6 text-sm leading-6 text-white/65">
           <p className="font-semibold text-white/90">Centre for IT Services</p>
+
           <p>University of Sri Jayewardenepura</p>
         </div>
       </section>
@@ -129,7 +134,6 @@ export default function LoginPage() {
       {/* RIGHT LOGIN PANEL */}
       <section className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10 lg:px-12">
         <div className="w-full max-w-md">
-          {/* Mobile branding */}
           <div className="mb-10 flex items-center gap-3 lg:hidden">
             <UniversityMark size="small" />
 
@@ -137,6 +141,7 @@ export default function LoginPage() {
               <h1 className="text-xl font-bold text-slate-900">
                 USJ CITS Desk
               </h1>
+
               <p className="text-xs text-slate-500">
                 University Systems Support Portal
               </p>
@@ -159,7 +164,6 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-              {/* Username */}
               <div>
                 <label
                   htmlFor="username"
@@ -192,7 +196,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
                 <label
                   htmlFor="password"
@@ -227,28 +230,26 @@ export default function LoginPage() {
                       showPassword ? "Hide password" : "Show password"
                     }
                     aria-pressed={showPassword}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-md text-slate-500 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-md text-slate-500 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-brand"
                   >
                     {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
                   </button>
                 </div>
               </div>
 
-              {/* Login error */}
-              {error && (
+              {errorNotice.message && (
                 <div
                   role="alert"
                   className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800"
                 >
-                  {error}
+                  {errorNotice.message}
                 </div>
               )}
 
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-deep focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? (
                   <>
@@ -267,6 +268,7 @@ export default function LoginPage() {
             <div className="mt-7 border-t border-slate-100 pt-6">
               <div className="flex items-start gap-3">
                 <TicketCheck size={19} className="mt-0.5 shrink-0 text-brand" />
+
                 <p className="text-xs leading-6 text-slate-500">
                   Access is restricted to authorized users. Contact your system
                   administrator if you need an account.

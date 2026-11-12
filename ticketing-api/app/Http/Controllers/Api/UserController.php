@@ -306,12 +306,69 @@ class UserController extends Controller
      * Format safe user details.
      */
 
+
     private function formatUser(User $user): array
     {
+        $user->loadMissing([
+            'roles.permissions',
+            'permissions',
+        ]);
+
         $isSuperAdmin = $user->hasRole(
             'Super Admin',
             'web'
         );
+
+        // Roles with their actual assigned permissions
+        $roles = $user->roles
+            ->map(function (Role $role) {
+                return [
+                    'id' => (int) $role->id,
+                    'name' => $role->name,
+
+                    'permissions' => $role->permissions
+                        ->map(function (Permission $permission) {
+                            return [
+                                'id' => (int) $permission->id,
+                                'name' => $permission->name,
+                            ];
+                        })
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->values()
+            ->all();
+
+        // ONLY directly assigned permissions
+        $directPermissionItems = $user->permissions
+            ->map(function (Permission $permission) {
+                return [
+                    'id' => (int) $permission->id,
+                    'name' => $permission->name,
+                ];
+            })
+            ->values()
+            ->all();
+
+        // Permissions received from assigned roles
+        $inheritedPermissions = $user
+            ->getPermissionsViaRoles()
+            ->pluck('name')
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        // All permissions the user can effectively use
+        $effectivePermissions = $isSuperAdmin
+            ? ['*']
+            : $user->getAllPermissions()
+            ->pluck('name')
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
 
         return [
             'id' => $user->id,
@@ -320,17 +377,25 @@ class UserController extends Controller
             'email' => $user->email,
             'contact_no' => $user->contact_no,
 
-            'roles' => $user->getRoleNames()->values(),
+            'roles' => $roles,
 
-            'permissions' => $isSuperAdmin
-                ? ['*']
-                : $user->getAllPermissions()
-                ->pluck('name')
-                ->sort()
-                ->values()
-                ->all(),
+            'direct_permissions' => collect(
+                $directPermissionItems
+            )->pluck('name')->all(),
+
+            'direct_permission_items' =>
+            $directPermissionItems,
+
+            'inherited_permissions' =>
+            $inheritedPermissions,
+
+            'effective_permissions' =>
+            $effectivePermissions,
 
             'is_super_admin' => $isSuperAdmin,
+
+            'created_at' => $user->created_at,
+            'updated_at' => $user->updated_at,
         ];
     }
 }

@@ -1,6 +1,9 @@
 import api from "../../api/client";
 
 export const usersApi = {
+  /**
+   * Get paginated users.
+   */
   async list({ page = 1, search = "", signal } = {}) {
     const response = await api.get("/api/users", {
       params: {
@@ -13,60 +16,81 @@ export const usersApi = {
     return response.data;
   },
 
+  /**
+   * Get latest user details and assignments.
+   */
+  async get(id) {
+    const response = await api.get(`/api/users/${id}`);
+
+    return response.data.data;
+  },
+
   async create(data) {
     const response = await api.post("/api/users", data);
+
     return response.data;
   },
 
   async update(id, data) {
     const response = await api.patch(`/api/users/${id}`, data);
+
     return response.data;
   },
 
   async remove(id) {
     const response = await api.delete(`/api/users/${id}`);
+
     return response.data;
   },
 
+  /**
+   * Replace assigned roles.
+   */
   async syncRoles(id, roleIds) {
     const response = await api.put(`/api/users/${id}/roles`, {
       role_ids: roleIds,
     });
+
     return response.data;
   },
 
+  /**
+   * Replace DIRECT user permissions only.
+   */
   async syncPermissions(id, permissionIds) {
     const response = await api.put(`/api/users/${id}/permissions`, {
       permission_ids: permissionIds,
     });
+
     return response.data;
   },
 
+  /**
+   * Load all paginated roles or permissions.
+   */
   async allOptions(endpoint) {
     const items = [];
     let page = 1;
 
-    while (true) {
+    while (page <= 100) {
       const response = await api.get(endpoint, {
         params: { page },
       });
 
-      items.push(...response.data.data);
+      const data = response.data;
 
-      const lastPage = Number(response.data.meta?.last_page ?? 1);
+      items.push(...(data.data ?? []));
 
-      if (page >= lastPage) break;
+      const lastPage = Number(data.meta?.last_page ?? 1);
 
-      if (page >= 100) {
-        throw new Error(
-          "Too many access records to load. Contact your administrator.",
-        );
+      if (page >= lastPage) {
+        return items;
       }
 
       page += 1;
     }
 
-    return items;
+    throw new Error("Too many access records to load.");
   },
 };
 
@@ -77,30 +101,31 @@ export function apiErrorMessage(
   const status = error?.response?.status;
 
   if (status === 401) {
-    return "Your session expired. Refresh the page to sign in again.";
+    return "Your session expired. Please sign in again.";
   }
 
   if (status === 403) {
     return "You don't have permission to perform this action.";
   }
 
-  if (status === 419) {
-    return "Your session expired. Refresh the page and try again.";
+  if (status === 409) {
+    return error.response?.data?.message || "This record is currently in use.";
   }
 
-  if (status === 409) {
-    return (
-      error.response?.data?.message ||
-      "This record cannot be changed because it is in use."
-    );
+  if (status === 419) {
+    return "Security session expired. Refresh and retry.";
   }
 
   if (status === 422) {
     return "Please check the entered information.";
   }
 
+  if (status === 429) {
+    return "Too many requests. Try again later.";
+  }
+
   if (!error?.response) {
-    return "Unable to connect to the server. Check your connection.";
+    return "Cannot connect to the Laravel server.";
   }
 
   return fallback;

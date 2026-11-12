@@ -14,6 +14,8 @@ import ModulePlaceholder from "./features/shared/ModulePlaceholder";
 
 import UsersPage from "./features/users/UsersPage";
 
+import RolesPage from "./features/roles/RolesPage";
+
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
 
@@ -65,10 +67,7 @@ export default function App() {
             path="roles"
             element={
               <PermissionRoute permission="roles.view">
-                <ModulePlaceholder
-                  title="Role Management"
-                  description="Dynamic role creation, editing, and permission assignment interfaces will be implemented here."
-                />
+                <RolesPage />
               </PermissionRoute>
             }
           />

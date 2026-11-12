@@ -2,24 +2,27 @@ import { useState } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
 
 import Modal from "../../components/ui/Modal";
+import useTimedMessage from "../../hooks/useTimedMessage";
+
 import { usersApi, apiErrorMessage } from "./usersApi";
 
 export default function DeleteUserDialog({ user, onClose, onDeleted }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const errorNotice = useTimedMessage();
 
   async function handleDelete() {
     if (busy) return;
 
     setBusy(true);
-    setError("");
+    errorNotice.clear();
 
     try {
       await usersApi.remove(user.id);
+
       onDeleted();
       onClose();
     } catch (err) {
-      setError(apiErrorMessage(err));
+      errorNotice.show(apiErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -43,9 +46,9 @@ export default function DeleteUserDialog({ user, onClose, onDeleted }) {
           </p>
         </div>
 
-        {error && (
+        {errorNotice.message && (
           <p role="alert" className="text-sm text-red-700">
-            {error}
+            {errorNotice.message}
           </p>
         )}
 
@@ -54,7 +57,7 @@ export default function DeleteUserDialog({ user, onClose, onDeleted }) {
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
+            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
           >
             Cancel
           </button>

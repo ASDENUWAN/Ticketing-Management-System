@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Save, UserRoundPlus } from "lucide-react";
 
 import Modal from "../../components/ui/Modal";
+import useTimedMessage from "../../hooks/useTimedMessage";
+
 import { usersApi, apiErrorMessage } from "./usersApi";
 
 const inputClass =
@@ -43,8 +45,8 @@ export default function UserFormDialog({ user, onClose, onSaved }) {
   });
 
   const [errors, setErrors] = useState({});
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const errorNotice = useTimedMessage();
 
   function change(event) {
     const { name, value } = event.target;
@@ -66,7 +68,7 @@ export default function UserFormDialog({ user, onClose, onSaved }) {
     if (busy) return;
 
     setBusy(true);
-    setError("");
+    errorNotice.clear();
     setErrors({});
 
     try {
@@ -93,7 +95,8 @@ export default function UserFormDialog({ user, onClose, onSaved }) {
       onClose();
     } catch (err) {
       setErrors(err.response?.data?.errors ?? {});
-      setError(apiErrorMessage(err));
+
+      errorNotice.show(apiErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -111,12 +114,12 @@ export default function UserFormDialog({ user, onClose, onSaved }) {
       busy={busy}
     >
       <form onSubmit={submit} className="space-y-4">
-        {error && (
+        {errorNotice.message && (
           <div
             role="alert"
             className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"
           >
-            {error}
+            {errorNotice.message}
           </div>
         )}
 
@@ -208,7 +211,7 @@ export default function UserFormDialog({ user, onClose, onSaved }) {
             />
 
             <p className="text-xs leading-5 text-slate-500">
-              Password must have at least 12 characters, uppercase and lowercase
+              Password must have at least 4 characters, uppercase and lowercase
               letters, a number, and a symbol.
             </p>
 

@@ -17,6 +17,7 @@ import {
 import UniversityMark from "../components/UniversityMark";
 import { useAuth } from "../context/AuthContext";
 import { can } from "../utils/permissions";
+import useTimedMessage from "../hooks/useTimedMessage";
 
 const navigation = [
   {
@@ -58,7 +59,6 @@ function SidebarContent({ user, onNavigate }) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* University identity */}
       <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-6">
         <UniversityMark size="small" />
 
@@ -66,11 +66,11 @@ function SidebarContent({ user, onNavigate }) {
           <h1 className="text-lg font-bold tracking-tight text-brand-deep">
             USJ CITS Desk
           </h1>
+
           <p className="text-xs text-slate-500">Systems Support Portal</p>
         </div>
       </div>
 
-      {/* Main navigation */}
       <div className="px-4 pt-7">
         <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
           Workspace
@@ -107,7 +107,6 @@ function SidebarContent({ user, onNavigate }) {
         })}
       </nav>
 
-      {/* Planned ticketing module */}
       <div className="mt-8 px-4">
         <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
           Ticketing
@@ -125,7 +124,6 @@ function SidebarContent({ user, onNavigate }) {
         </div>
       </div>
 
-      {/* Signed-in user */}
       <div className="mt-auto border-t border-slate-200 p-4">
         <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-deep text-sm font-semibold text-white">
@@ -147,23 +145,24 @@ function SidebarContent({ user, onNavigate }) {
 
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
+
   const navigate = useNavigate();
   const location = useLocation();
 
   const [mobileOpen, setMobileOpen] = useState(false);
+
   const [loggingOut, setLoggingOut] = useState(false);
-  const [error, setError] = useState("");
+
+  const errorNotice = useTimedMessage();
 
   const currentPage =
     navigation.find((item) => item.path === location.pathname)?.label ||
     "USJ CITS Desk";
 
-  // Close mobile drawer after navigation.
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
 
-  // Allow users to close the drawer using Escape.
   useEffect(() => {
     if (!mobileOpen) return;
 
@@ -183,15 +182,14 @@ export default function DashboardLayout() {
   async function handleLogout() {
     if (loggingOut) return;
 
+    setLoggingOut(true);
+    errorNotice.clear();
+
     try {
-      setLoggingOut(true);
-      setError("");
-
       await logout();
-
       navigate("/login", { replace: true });
     } catch {
-      setError("Unable to sign out. Please try again.");
+      errorNotice.show("Unable to sign out. Please try again.");
     } finally {
       setLoggingOut(false);
     }
@@ -237,7 +235,6 @@ export default function DashboardLayout() {
 
       {/* MAIN APPLICATION */}
       <div className="min-h-screen lg:pl-72">
-        {/* TOP BAR */}
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="flex min-h-18 items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
@@ -293,14 +290,13 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        {/* CONTENT AREA */}
         <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
-          {error && (
+          {errorNotice.message && (
             <div
               role="alert"
               className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
             >
-              {error}
+              {errorNotice.message}
             </div>
           )}
 
