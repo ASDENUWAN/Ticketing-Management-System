@@ -244,4 +244,32 @@ class UserManagementApiTest extends TestCase
             'id' => $admin->id,
         ]);
     }
+
+
+    public function test_user_search_returns_matching_records(): void
+    {
+        $admin = $this->superAdmin();
+
+        for ($i = 1; $i <= 25; $i++) {
+            User::create([
+                'username' => 'agent' . $i,
+                'password' => 'TestPassword123!Secure',
+            ]);
+        }
+
+        User::create([
+            'username' => 'specialsupport',
+            'password' => 'TestPassword123!Secure',
+        ]);
+
+        $this->actingAs($admin, 'web')
+            ->getJson('/api/users?search=specialsupport')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath(
+                'data.0.username',
+                'specialsupport'
+            );
+    }
 }

@@ -17,10 +17,33 @@ class RoleController extends Controller
     /**
      * GET /api/roles
      */
-    public function index(): JsonResponse
+
+    /**
+     * GET /api/roles?search=...&page=...
+     */
+    public function index(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'search' => [
+                'sometimes',
+                'string',
+                'max:80',
+            ],
+        ]);
+
+        $search = trim($validated['search'] ?? '');
+
         $roles = Role::query()
             ->where('guard_name', 'web')
+            ->when($search !== '', function ($query) use ($search) {
+                $term = addcslashes($search, '%_\\');
+
+                $query->where(
+                    'name',
+                    'like',
+                    "%{$term}%"
+                );
+            })
             ->with('permissions')
             ->orderBy('name')
             ->paginate(20);
@@ -30,15 +53,18 @@ class RoleController extends Controller
                 ->map(
                     fn(Role $role) =>
                     $this->formatRole($role)
-                ),
+                )
+                ->values(),
 
             'meta' => [
                 'current_page' => $roles->currentPage(),
                 'last_page' => $roles->lastPage(),
+                'per_page' => $roles->perPage(),
                 'total' => $roles->total(),
             ],
         ]);
     }
+
 
     /**
      * POST /api/roles

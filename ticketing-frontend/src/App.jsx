@@ -12,6 +12,8 @@ import DashboardPage from "./features/dashboard/DashboardPage";
 import ProfilePage from "./features/profile/ProfilePage";
 import ModulePlaceholder from "./features/shared/ModulePlaceholder";
 
+import UsersPage from "./features/users/UsersPage";
+
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
 
@@ -54,10 +56,7 @@ export default function App() {
             path="users"
             element={
               <PermissionRoute permission="users.view">
-                <ModulePlaceholder
-                  title="User Management"
-                  description="User management screens will be connected to the existing Laravel user APIs in the next frontend step."
-                />
+                <UsersPage />
               </PermissionRoute>
             }
           />

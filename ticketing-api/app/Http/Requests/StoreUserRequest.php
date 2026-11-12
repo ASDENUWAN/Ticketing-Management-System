@@ -68,11 +68,9 @@ class StoreUserRequest extends FormRequest
             'password' => [
                 'required',
                 'confirmed',
-                Password::min(12)
+                Password::min(4)
                     ->max(128)
-                    ->mixedCase()
-                    ->numbers()
-                    ->symbols(),
+                    ->numbers(),
             ],
 
             // Prevent bypassing separate role APIs
