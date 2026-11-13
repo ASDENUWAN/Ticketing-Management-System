@@ -9,12 +9,17 @@ import DashboardLayout from "./layouts/DashboardLayout";
 
 import LoginPage from "./features/auth/LoginPage";
 import DashboardPage from "./features/dashboard/DashboardPage";
-import ProfilePage from "./features/profile/ProfilePage";
-import ModulePlaceholder from "./features/shared/ModulePlaceholder";
 
 import UsersPage from "./features/users/UsersPage";
-
 import RolesPage from "./features/roles/RolesPage";
+import PermissionsPage from "./features/permissions/PermissionsPage";
+import ProfilePage from "./features/profile/ProfilePage";
+
+/*
+|--------------------------------------------------------------------------
+| Guest-only route
+|--------------------------------------------------------------------------
+*/
 
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
@@ -31,13 +36,23 @@ function GuestRoute({ children }) {
     );
   }
 
-  return user ? <Navigate to="/" replace /> : children;
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
 }
+
+/*
+|--------------------------------------------------------------------------
+| Application routes
+|--------------------------------------------------------------------------
+*/
 
 export default function App() {
   return (
     <Routes>
-      {/* Public login */}
+      {/* LOGIN */}
       <Route
         path="/login"
         element={
@@ -47,13 +62,16 @@ export default function App() {
         }
       />
 
-      {/* Protected application */}
+      {/* AUTHENTICATED ROUTES */}
       <Route element={<ProtectedRoute />}>
         <Route element={<DashboardLayout />}>
+          {/* DASHBOARD */}
           <Route index element={<DashboardPage />} />
 
+          {/* MY PROFILE */}
           <Route path="profile" element={<ProfilePage />} />
 
+          {/* USER MANAGEMENT */}
           <Route
             path="users"
             element={
@@ -63,6 +81,7 @@ export default function App() {
             }
           />
 
+          {/* ROLE MANAGEMENT */}
           <Route
             path="roles"
             element={
@@ -72,20 +91,19 @@ export default function App() {
             }
           />
 
+          {/* PERMISSION MANAGEMENT */}
           <Route
             path="permissions"
             element={
               <PermissionRoute permission="permissions.view">
-                <ModulePlaceholder
-                  title="Permission Management"
-                  description="Dynamic permission creation and management interfaces will be implemented here."
-                />
+                <PermissionsPage />
               </PermissionRoute>
             }
           />
         </Route>
       </Route>
 
+      {/* UNKNOWN ROUTES */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
