@@ -9,6 +9,10 @@ use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProfileAccessController;
 
+
+use App\Http\Controllers\Api\CategoryTypeController;
+use App\Http\Controllers\Api\CategoryController;
+
 Route::middleware('auth:sanctum')->group(function () {
 
     /*
@@ -157,4 +161,60 @@ Route::middleware('auth:sanctum')->group(function () {
         PermissionController::class,
         'destroy',
     ])->middleware('can:permissions.delete');
+
+
+
+    /*
+|--------------------------------------------------------------------------
+| Category Type Management
+|--------------------------------------------------------------------------
+*/
+
+    // Viewing both tables uses categories.view.
+    Route::get('/category-types', [
+        CategoryTypeController::class,
+        'index',
+    ])->middleware('can:categories.view');
+
+    Route::post('/category-types', [
+        CategoryTypeController::class,
+        'store',
+    ])->middleware('can:category_types.create');
+
+    Route::patch('/category-types/{categoryType}', [
+        CategoryTypeController::class,
+        'update',
+    ])->middleware('can:category_types.update');
+
+    Route::delete('/category-types/{categoryType}', [
+        CategoryTypeController::class,
+        'destroy',
+    ])->middleware('can:category_types.delete');
+
+
+    /*
+|--------------------------------------------------------------------------
+| Category Management
+|--------------------------------------------------------------------------
+*/
+
+    Route::get('/categories', [
+        CategoryController::class,
+        'index',
+    ])->middleware('can:categories.view');
+
+    Route::post('/categories', [
+        CategoryController::class,
+        'store',
+    ])->middleware('can:categories.create');
+
+    Route::patch('/categories/{category}', [
+        CategoryController::class,
+        'update',
+    ])->middleware('can:categories.update');
+
+    Route::delete('/categories/{category}', [
+        CategoryController::class,
+        'destroy',
+    ])->middleware('can:categories.delete');
 });

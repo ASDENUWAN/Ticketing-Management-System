@@ -25,6 +25,15 @@ class RolePermissionGuard
         'permissions.update',
         'permissions.delete',
         'permissions.assign',
+
+        'categories.view',
+        'categories.create',
+        'categories.update',
+        'categories.delete',
+        'category_types.create',
+        'category_types.update',
+        'category_types.delete',
+
     ];
 
     /**
