@@ -11,6 +11,7 @@ import {
   Ticket,
   Menu,
   X,
+  Layers3,
   LogOut,
 } from "lucide-react";
 
@@ -43,6 +44,12 @@ const navigation = [
     path: "/permissions",
     icon: KeyRound,
     permission: "permissions.view",
+  },
+  {
+    label: "Categories",
+    path: "/categories",
+    icon: Layers3,
+    permission: "categories.view",
   },
   {
     label: "My Profile",

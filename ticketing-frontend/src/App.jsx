@@ -13,13 +13,8 @@ import DashboardPage from "./features/dashboard/DashboardPage";
 import UsersPage from "./features/users/UsersPage";
 import RolesPage from "./features/roles/RolesPage";
 import PermissionsPage from "./features/permissions/PermissionsPage";
+import CategoriesPage from "./features/categories/CategoriesPage";
 import ProfilePage from "./features/profile/ProfilePage";
-
-/*
-|--------------------------------------------------------------------------
-| Guest-only route
-|--------------------------------------------------------------------------
-*/
 
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
@@ -29,30 +24,18 @@ function GuestRoute({ children }) {
       <div className="flex min-h-screen items-center justify-center bg-app-bg">
         <div
           role="status"
-          aria-label="Loading"
           className="h-10 w-10 animate-spin rounded-full border-4 border-red-100 border-t-brand"
         />
       </div>
     );
   }
 
-  if (user) {
-    return <Navigate to="/" replace />;
-  }
-
-  return children;
+  return user ? <Navigate to="/" replace /> : children;
 }
-
-/*
-|--------------------------------------------------------------------------
-| Application routes
-|--------------------------------------------------------------------------
-*/
 
 export default function App() {
   return (
     <Routes>
-      {/* LOGIN */}
       <Route
         path="/login"
         element={
@@ -62,16 +45,12 @@ export default function App() {
         }
       />
 
-      {/* AUTHENTICATED ROUTES */}
       <Route element={<ProtectedRoute />}>
         <Route element={<DashboardLayout />}>
-          {/* DASHBOARD */}
           <Route index element={<DashboardPage />} />
 
-          {/* MY PROFILE */}
           <Route path="profile" element={<ProfilePage />} />
 
-          {/* USER MANAGEMENT */}
           <Route
             path="users"
             element={
@@ -81,7 +60,6 @@ export default function App() {
             }
           />
 
-          {/* ROLE MANAGEMENT */}
           <Route
             path="roles"
             element={
@@ -91,7 +69,6 @@ export default function App() {
             }
           />
 
-          {/* PERMISSION MANAGEMENT */}
           <Route
             path="permissions"
             element={
@@ -100,10 +77,18 @@ export default function App() {
               </PermissionRoute>
             }
           />
+
+          <Route
+            path="categories"
+            element={
+              <PermissionRoute permission="categories.view">
+                <CategoriesPage />
+              </PermissionRoute>
+            }
+          />
         </Route>
       </Route>
 
-      {/* UNKNOWN ROUTES */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
