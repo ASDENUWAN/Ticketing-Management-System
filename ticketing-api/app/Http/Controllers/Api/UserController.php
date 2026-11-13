@@ -69,6 +69,10 @@ class UserController extends Controller
     /**
      * POST /api/users
      */
+
+    /**
+     * POST /api/users
+     */
     public function store(
         StoreUserRequest $request
     ): JsonResponse {
@@ -79,7 +83,15 @@ class UserController extends Controller
             'password',
         ]);
 
-        $user = User::create($data);
+        $user = DB::transaction(function () use ($data) {
+            $user = User::create($data);
+
+            // New users can edit their own profile
+            // unless the Super Admin disables it.
+            $user->givePermissionTo('profile.update');
+
+            return $user;
+        });
 
         return response()->json([
             'message' => 'User created successfully.',
@@ -307,6 +319,7 @@ class UserController extends Controller
      */
 
 
+
     private function formatUser(User $user): array
     {
         $user->loadMissing([
@@ -319,40 +332,30 @@ class UserController extends Controller
             'web'
         );
 
-        // Roles with their actual assigned permissions
         $roles = $user->roles
-            ->map(function (Role $role) {
-                return [
-                    'id' => (int) $role->id,
-                    'name' => $role->name,
-
-                    'permissions' => $role->permissions
-                        ->map(function (Permission $permission) {
-                            return [
-                                'id' => (int) $permission->id,
-                                'name' => $permission->name,
-                            ];
-                        })
-                        ->values()
-                        ->all(),
-                ];
-            })
+            ->map(fn($role) => [
+                'id' => (int) $role->id,
+                'name' => $role->name,
+                'permissions' => $role->permissions
+                    ->map(fn($permission) => [
+                        'id' => (int) $permission->id,
+                        'name' => $permission->name,
+                    ])
+                    ->values()
+                    ->all(),
+            ])
             ->values()
             ->all();
 
-        // ONLY directly assigned permissions
-        $directPermissionItems = $user->permissions
-            ->map(function (Permission $permission) {
-                return [
-                    'id' => (int) $permission->id,
-                    'name' => $permission->name,
-                ];
-            })
+        $directItems = $user->permissions
+            ->map(fn($permission) => [
+                'id' => (int) $permission->id,
+                'name' => $permission->name,
+            ])
             ->values()
             ->all();
 
-        // Permissions received from assigned roles
-        $inheritedPermissions = $user
+        $inherited = $user
             ->getPermissionsViaRoles()
             ->pluck('name')
             ->unique()
@@ -360,8 +363,7 @@ class UserController extends Controller
             ->values()
             ->all();
 
-        // All permissions the user can effectively use
-        $effectivePermissions = $isSuperAdmin
+        $effective = $isSuperAdmin
             ? ['*']
             : $user->getAllPermissions()
             ->pluck('name')
@@ -378,19 +380,18 @@ class UserController extends Controller
             'contact_no' => $user->contact_no,
 
             'roles' => $roles,
+            'direct_permissions' => collect($directItems)
+                ->pluck('name')
+                ->all(),
+            'direct_permission_items' => $directItems,
+            'inherited_permissions' => $inherited,
+            'effective_permissions' => $effective,
 
-            'direct_permissions' => collect(
-                $directPermissionItems
-            )->pluck('name')->all(),
+            'profile_edit_enabled' =>
+            (bool) $user->profile_edit_enabled,
 
-            'direct_permission_items' =>
-            $directPermissionItems,
-
-            'inherited_permissions' =>
-            $inheritedPermissions,
-
-            'effective_permissions' =>
-            $effectivePermissions,
+            'can_edit_profile' =>
+            $user->canEditOwnProfile(),
 
             'is_super_admin' => $isSuperAdmin,
 

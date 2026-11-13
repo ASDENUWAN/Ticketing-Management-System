@@ -92,6 +92,18 @@ export const usersApi = {
 
     throw new Error("Too many access records to load.");
   },
+
+  /**
+   * Super Admin:
+   * Enable or disable a user's own profile editing.
+   */
+  async updateProfileEditing(id, enabled) {
+    const response = await api.patch(`/api/users/${id}/profile-edit`, {
+      enabled: Boolean(enabled),
+    });
+
+    return response.data;
+  },
 };
 
 export function apiErrorMessage(

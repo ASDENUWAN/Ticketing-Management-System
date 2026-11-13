@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
 use App\Models\User;
@@ -33,21 +34,20 @@ class AuthController extends Controller
 
         $request->session()->regenerate();
 
-        $user = Auth::guard('web')->user();
-
         return response()->json([
             'message' => 'Login successful.',
-            'user' => $this->formatUser($user),
-        ]);
+            'user' => $this->formatUser(
+                Auth::guard('web')->user()
+            ),
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     /**
      * GET /api/me
-     *
-     * Always return current access information.
      */
-    public function me(Request $request): JsonResponse
-    {
+    public function me(
+        Request $request
+    ): JsonResponse {
         $user = User::query()
             ->with([
                 'roles.permissions',
@@ -57,7 +57,7 @@ class AuthController extends Controller
 
         return response()->json([
             'user' => $this->formatUser($user),
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     /**
@@ -73,15 +73,9 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Logout successful.',
-        ]);
+        ])->header('Cache-Control', 'no-store');
     }
 
-    /**
-     * Format authenticated user.
-     *
-     * Keeps role permissions and direct
-     * permissions correctly separated.
-     */
     private function formatUser(User $user): array
     {
         $user->loadMissing([
@@ -132,11 +126,15 @@ class AuthController extends Controller
                 ->all(),
 
             'direct_permissions' => $directPermissions,
-
             'inherited_permissions' =>
             $inheritedPermissions,
-
             'permissions' => $effectivePermissions,
+
+            'profile_edit_enabled' =>
+            (bool) $user->profile_edit_enabled,
+
+            'can_edit_profile' =>
+            $user->canEditOwnProfile(),
 
             'is_super_admin' => $isSuperAdmin,
         ];

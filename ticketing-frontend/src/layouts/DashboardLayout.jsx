@@ -59,6 +59,7 @@ function SidebarContent({ user, onNavigate }) {
 
   return (
     <div className="flex h-full flex-col">
+      {/* UNIVERSITY BRANDING */}
       <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-6">
         <UniversityMark size="small" />
 
@@ -71,6 +72,7 @@ function SidebarContent({ user, onNavigate }) {
         </div>
       </div>
 
+      {/* WORKSPACE */}
       <div className="px-4 pt-7">
         <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
           Workspace
@@ -107,6 +109,7 @@ function SidebarContent({ user, onNavigate }) {
         })}
       </nav>
 
+      {/* TICKETING MODULE */}
       <div className="mt-8 px-4">
         <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
           Ticketing
@@ -124,20 +127,33 @@ function SidebarContent({ user, onNavigate }) {
         </div>
       </div>
 
+      {/* CLICKABLE ACCOUNT AT SIDEBAR BOTTOM */}
       <div className="mt-auto border-t border-slate-200 p-4">
-        <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+        <NavLink
+          to="/profile"
+          onClick={onNavigate}
+          aria-label="View my profile"
+          className={({ isActive }) =>
+            [
+              "group flex items-center gap-3 rounded-xl p-3",
+              "transition-colors focus-visible:outline-2",
+              "focus-visible:outline-brand",
+              isActive ? "bg-red-50" : "bg-slate-50 hover:bg-red-50",
+            ].join(" ")
+          }
+        >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-deep text-sm font-semibold text-white">
             {(user?.name || user?.username || "U").charAt(0).toUpperCase()}
           </div>
 
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-800">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-800 group-hover:text-brand">
               {user?.name || user?.username}
             </p>
 
             <p className="truncate text-xs text-slate-500">@{user?.username}</p>
           </div>
-        </div>
+        </NavLink>
       </div>
     </div>
   );
@@ -153,16 +169,19 @@ export default function DashboardLayout() {
 
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const errorNotice = useTimedMessage();
+  const errorNotice = useTimedMessage(30000);
 
   const currentPage =
     navigation.find((item) => item.path === location.pathname)?.label ||
     "USJ CITS Desk";
 
+  // Close drawer whenever navigation changes.
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  // Support closing the mobile drawer
+  // using the Escape key.
   useEffect(() => {
     if (!mobileOpen) return;
 
@@ -235,6 +254,7 @@ export default function DashboardLayout() {
 
       {/* MAIN APPLICATION */}
       <div className="min-h-screen lg:pl-72">
+        {/* TOP HEADER */}
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="flex min-h-18 items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
@@ -260,18 +280,40 @@ export default function DashboardLayout() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <p className="max-w-40 truncate text-sm font-semibold">
-                  {user?.name || user?.username}
-                </p>
+              {/* CLICKABLE TOP-RIGHT PROFILE */}
+              <NavLink
+                to="/profile"
+                aria-label="Open my profile"
+                title="View my profile"
+                className={({ isActive }) =>
+                  [
+                    "flex items-center gap-3 rounded-xl px-2 py-2",
+                    "transition-colors hover:bg-red-50",
+                    "focus-visible:outline-2 focus-visible:outline-brand",
+                    isActive ? "bg-red-50" : "",
+                  ].join(" ")
+                }
+              >
+                <div className="hidden text-right sm:block">
+                  <p className="max-w-36 truncate text-sm font-semibold text-slate-800">
+                    {user?.name || user?.username}
+                  </p>
 
-                <p className="text-xs text-slate-500">
-                  {user?.is_super_admin
-                    ? "Super Admin"
-                    : user?.roles?.[0] || "Account"}
-                </p>
-              </div>
+                  <p className="text-xs text-slate-500">
+                    {user?.is_super_admin
+                      ? "Super Admin"
+                      : user?.roles?.[0] || "My Profile"}
+                  </p>
+                </div>
 
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-sm font-semibold text-brand">
+                  {(user?.name || user?.username || "U")
+                    .charAt(0)
+                    .toUpperCase()}
+                </div>
+              </NavLink>
+
+              {/* LOGOUT */}
               <button
                 type="button"
                 onClick={handleLogout}
@@ -290,6 +332,7 @@ export default function DashboardLayout() {
           </div>
         </header>
 
+        {/* PAGE CONTENT */}
         <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
           {errorNotice.message && (
             <div

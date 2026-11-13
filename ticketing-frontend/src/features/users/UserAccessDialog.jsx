@@ -8,15 +8,22 @@ import useTimedMessage from "../../hooks/useTimedMessage";
 
 import { usersApi, apiErrorMessage } from "./usersApi";
 
-function sameIds(a, b) {
+import ProfileEditAccess from "./ProfileEditAccess";
+
+// Compare two assignment lists regardless of order.
+function sameItems(a, b) {
   if (a.length !== b.length) return false;
 
-  const set = new Set(a);
+  const values = new Set(a);
 
-  return b.every((id) => set.has(id));
+  return b.every((value) => values.has(value));
 }
 
 export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
+  // -----------------------------------
+  // AUTHORIZATION
+  // -----------------------------------
+
   const canManageRoles =
     can(actor, "users.update") &&
     can(actor, "roles.assign") &&
@@ -27,44 +34,61 @@ export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
     can(actor, "permissions.assign") &&
     can(actor, "permissions.view");
 
-  const [allRoles, setAllRoles] = useState([]);
-  const [allPermissions, setAllPermissions] = useState([]);
+  const isSuperAdmin = actor?.is_super_admin === true;
+
+  const actorPermissions = useMemo(
+    () => new Set(actor?.permissions ?? []),
+    [actor?.permissions],
+  );
+
+  // -----------------------------------
+  // STATE
+  // -----------------------------------
+
+  const [latestUser, setLatestUser] = useState(null);
+
+  const [roleOptions, setRoleOptions] = useState([]);
+
+  const [permissionOptions, setPermissionOptions] = useState([]);
 
   const [selectedRoles, setSelectedRoles] = useState([]);
 
   const [originalRoles, setOriginalRoles] = useState([]);
 
-  const [selectedDirectPermissions, setSelectedDirectPermissions] = useState(
-    [],
-  );
+  const [selectedDirect, setSelectedDirect] = useState([]);
 
-  const [originalDirectPermissions, setOriginalDirectPermissions] = useState(
-    [],
-  );
+  const [originalDirect, setOriginalDirect] = useState([]);
+
+  const [permissionSearch, setPermissionSearch] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
 
   const [saving, setSaving] = useState(null);
-  const [permissionSearch, setPermissionSearch] = useState("");
 
-  const errorNotice = useTimedMessage();
+  const {
+    message: error,
+    show: showError,
+    clear: clearError,
+  } = useTimedMessage(30000);
 
-  const actorPermissionKey = (actor?.permissions ?? []).join("|");
+  const busy = saving !== null;
 
-  /**
-   * Load the current user's REAL assignments.
-   */
+  // -----------------------------------
+  // LOAD CURRENT ACCESS
+  // -----------------------------------
+
   useEffect(() => {
     let active = true;
 
     async function loadAccess() {
       setLoading(true);
       setLoadFailed(false);
-      errorNotice.clear();
+      clearError();
 
       try {
-        const [latestUser, roles, permissions] = await Promise.all([
+        const [savedUser, roles, permissions] = await Promise.all([
+          // Always fetch latest assignments.
           usersApi.get(user.id),
 
           canManageRoles
@@ -78,47 +102,34 @@ export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
 
         if (!active) return;
 
-        const roleIds = (latestUser.roles ?? []).map((role) => Number(role.id));
+        // Actual role IDs saved in Laravel.
+        const roleIds = (savedUser.roles ?? []).map((role) => Number(role.id));
 
-        const directNames = new Set(latestUser.direct_permissions ?? []);
+        // Actual DIRECT permission names.
+        const directNames = (savedUser.direct_permissions ?? []).map(String);
 
-        const directIds = permissions
-          .filter((permission) => directNames.has(permission.name))
-          .map((permission) => Number(permission.id));
+        setLatestUser(savedUser);
 
-        setAllRoles(roles);
-        setAllPermissions(permissions);
+        setRoleOptions(roles);
+        setPermissionOptions(permissions);
 
+        // Preselect already assigned roles.
         setSelectedRoles(roleIds);
         setOriginalRoles(roleIds);
 
-        setSelectedDirectPermissions(directIds);
-        setOriginalDirectPermissions(directIds);
-
-        // Detect direct permissions not available
-        // in the current permission selector.
-        const knownNames = new Set(
-          permissions.map((permission) => permission.name),
-        );
-
-        if (
-          canManagePermissions &&
-          [...directNames].some((name) => !knownNames.has(name))
-        ) {
-          throw new Error(
-            "Some assigned direct permissions are unavailable. Reload and contact an administrator.",
-          );
-        }
+        // Preselect already assigned direct permissions.
+        setSelectedDirect(directNames);
+        setOriginalDirect(directNames);
       } catch (err) {
-        if (active) {
-          setLoadFailed(true);
+        if (!active) return;
 
-          errorNotice.show(
-            err.response
-              ? apiErrorMessage(err)
-              : err.message || "Unable to load access.",
-          );
-        }
+        setLoadFailed(true);
+
+        showError(
+          err.response
+            ? apiErrorMessage(err)
+            : err.message || "Unable to load user access.",
+        );
       } finally {
         if (active) {
           setLoading(false);
@@ -131,132 +142,254 @@ export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
     return () => {
       active = false;
     };
-  }, [
-    user.id,
-    canManageRoles,
-    canManagePermissions,
-    actorPermissionKey,
-    actor?.is_super_admin,
-  ]);
+  }, [user.id, canManageRoles, canManagePermissions, clearError, showError]);
 
-  /**
-   * Roles this administrator is allowed to assign.
-   */
-  const assignableRoles = useMemo(() => {
-    return allRoles.filter((role) => {
-      if (role.name.toLowerCase() === "super admin") {
-        return false;
-      }
+  // -----------------------------------
+  // MERGE AVAILABLE + ASSIGNED ROLES
+  // -----------------------------------
 
-      if (actor?.is_super_admin) {
-        return true;
-      }
+  const roles = useMemo(() => {
+    const roleMap = new Map();
 
-      return (role.permissions ?? []).every((permission) =>
-        actor?.permissions?.includes(permission.name),
-      );
-    });
-  }, [allRoles, actorPermissionKey, actor?.is_super_admin]);
+    // Available roles from role API.
+    for (const role of roleOptions) {
+      roleMap.set(Number(role.id), {
+        ...role,
+        id: Number(role.id),
+        available: true,
+      });
+    }
 
-  const assignableRoleIds = useMemo(
-    () => new Set(assignableRoles.map((role) => Number(role.id))),
-    [assignableRoles],
+    // Include saved roles even when the current
+    // administrator cannot assign them.
+    for (const assigned of latestUser?.roles ?? []) {
+      const id = Number(assigned.id);
+      const existing = roleMap.get(id);
+
+      roleMap.set(id, {
+        ...assigned,
+        ...existing,
+        id,
+
+        permissions: assigned.permissions ?? existing?.permissions ?? [],
+
+        available: Boolean(existing),
+      });
+    }
+
+    return Array.from(roleMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [roleOptions, latestUser]);
+
+  const roleById = useMemo(
+    () => new Map(roles.map((role) => [role.id, role])),
+    [roles],
   );
 
-  const unmanageableRole = originalRoles.some(
-    (id) => !assignableRoleIds.has(id),
-  );
+  // -----------------------------------
+  // ROLE EDITING AUTHORIZATION
+  // -----------------------------------
 
-  /**
-   * Collect permissions belonging to
-   * CURRENTLY SELECTED ROLES.
-   */
+  function canEditRole(role) {
+    if (!role || !canManageRoles) {
+      return false;
+    }
+
+    if (!role.available) {
+      return false;
+    }
+
+    // Never assign protected Super Admin role.
+    if (role.name.toLowerCase() === "super admin") {
+      return false;
+    }
+
+    if (isSuperAdmin) {
+      return true;
+    }
+
+    return (role.permissions ?? []).every((permission) =>
+      actorPermissions.has(permission.name),
+    );
+  }
+
+  // Display assigned roles even when locked.
+  const visibleRoles = roles.filter((role) => {
+    const assigned = selectedRoles.includes(role.id);
+
+    if (assigned) {
+      return true;
+    }
+
+    return canEditRole(role);
+  });
+
+  // -----------------------------------
+  // ROLE-INHERITED PERMISSIONS
+  // -----------------------------------
+
   const inheritedByRole = useMemo(() => {
-    return allRoles
-      .filter((role) => selectedRoles.includes(Number(role.id)))
-      .map((role) => ({
-        id: role.id,
-        name: role.name,
-        permissions: role.permissions ?? [],
-      }));
-  }, [allRoles, selectedRoles]);
+    return selectedRoles.map((id) => roleById.get(id)).filter(Boolean);
+  }, [selectedRoles, roleById]);
 
   const inheritedNames = useMemo(() => {
     const names = new Set();
 
-    inheritedByRole.forEach((role) => {
-      role.permissions.forEach((permission) => {
+    for (const role of inheritedByRole) {
+      for (const permission of role.permissions ?? []) {
         names.add(permission.name);
-      });
-    });
+      }
+    }
 
     return names;
   }, [inheritedByRole]);
 
-  /**
-   * Direct permissions are NOT automatically
-   * checked from role-inherited permissions.
-   */
-  const assignablePermissions = useMemo(() => {
-    if (actor?.is_super_admin) {
-      return allPermissions;
+  // -----------------------------------
+  // MERGE AVAILABLE + DIRECT PERMISSIONS
+  // -----------------------------------
+
+  const permissions = useMemo(() => {
+    const permissionMap = new Map();
+
+    // Permissions available from API.
+    for (const permission of permissionOptions) {
+      permissionMap.set(permission.name, {
+        ...permission,
+        id: Number(permission.id),
+        available: true,
+      });
     }
 
-    return allPermissions.filter((permission) =>
-      actor?.permissions?.includes(permission.name),
+    // Include permissions already assigned directly,
+    // even if unavailable in the selectable list.
+    for (const assigned of latestUser?.direct_permission_items ?? []) {
+      const existing = permissionMap.get(assigned.name);
+
+      permissionMap.set(assigned.name, {
+        ...assigned,
+        ...existing,
+
+        id: Number(existing?.id ?? assigned.id),
+
+        available: Boolean(existing),
+      });
+    }
+
+    // Compatibility with name-based responses.
+    for (const name of latestUser?.direct_permissions ?? []) {
+      if (!permissionMap.has(name)) {
+        permissionMap.set(name, {
+          id: null,
+          name,
+          available: false,
+        });
+      }
+    }
+
+    return Array.from(permissionMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
     );
-  }, [allPermissions, actorPermissionKey, actor?.is_super_admin]);
+  }, [permissionOptions, latestUser]);
 
-  const assignablePermissionIds = useMemo(
+  const permissionByName = useMemo(
     () =>
-      new Set(assignablePermissions.map((permission) => Number(permission.id))),
-    [assignablePermissions],
+      new Map(permissions.map((permission) => [permission.name, permission])),
+    [permissions],
   );
 
-  const unmanageableDirectPermission = originalDirectPermissions.some(
-    (id) => !assignablePermissionIds.has(id),
-  );
+  // -----------------------------------
+  // DIRECT PERMISSION AUTHORIZATION
+  // -----------------------------------
 
-  /**
-   * Hide role-inherited-only permissions
-   * from the direct permission selector.
-   *
-   * If the same permission is ALSO assigned
-   * directly, keep it visible and checked.
-   */
-  const visibleDirectPermissions = useMemo(() => {
+  function canEditPermission(permission) {
+    if (!permission || !canManagePermissions) {
+      return false;
+    }
+
+    if (!permission.available) {
+      return false;
+    }
+
+    if (!Number.isInteger(permission.id) || permission.id <= 0) {
+      return false;
+    }
+
+    if (isSuperAdmin) {
+      return true;
+    }
+
+    return actorPermissions.has(permission.name);
+  }
+
+  // -----------------------------------
+  // DIRECT PERMISSION FILTER
+  // -----------------------------------
+
+  const visibleDirectPermissions = permissions.filter((permission) => {
+    const isDirect = selectedDirect.includes(permission.name);
+
+    const isInherited = inheritedNames.has(permission.name);
+
+    // Role-only inherited permissions must
+    // NOT appear in direct permission list.
+    if (isInherited && !isDirect) {
+      return false;
+    }
+
+    // Always show assigned direct permissions.
+    if (!isDirect && !canEditPermission(permission)) {
+      return false;
+    }
+
     const query = permissionSearch.trim().toLowerCase();
 
-    return assignablePermissions.filter((permission) => {
-      const isInherited = inheritedNames.has(permission.name);
+    if (!query) {
+      return true;
+    }
 
-      const isDirect = selectedDirectPermissions.includes(
-        Number(permission.id),
-      );
+    return permission.name.toLowerCase().includes(query);
+  });
 
-      if (isInherited && !isDirect) {
-        return false;
-      }
+  // -----------------------------------
+  // PROTECTED ACCOUNTS
+  // -----------------------------------
 
-      if (!query) return true;
+  const targetProtected =
+    latestUser?.is_super_admin === true ||
+    Number(latestUser?.id) === Number(actor?.id);
 
-      return permission.name.toLowerCase().includes(query);
-    });
-  }, [
-    assignablePermissions,
-    inheritedNames,
-    selectedDirectPermissions,
-    permissionSearch,
-  ]);
+  const targetOutsideAuthority =
+    !isSuperAdmin &&
+    (latestUser?.effective_permissions ?? []).some(
+      (permission) => !actorPermissions.has(permission),
+    );
 
-  const rolesChanged = !sameIds(selectedRoles, originalRoles);
+  const cannotManageTarget = targetProtected || targetOutsideAuthority;
 
-  const permissionsChanged = !sameIds(
-    selectedDirectPermissions,
-    originalDirectPermissions,
+  // -----------------------------------
+  // LOCKED ASSIGNMENTS
+  // -----------------------------------
+
+  const lockedAssignedRole = originalRoles.some(
+    (id) => !canEditRole(roleById.get(id)),
   );
 
-  const busy = saving !== null;
+  const lockedDirectPermission = originalDirect.some(
+    (name) => !canEditPermission(permissionByName.get(name)),
+  );
+
+  // -----------------------------------
+  // DETECT UNSAVED CHANGES
+  // -----------------------------------
+
+  const rolesChanged = !sameItems(selectedRoles, originalRoles);
+
+  const permissionsChanged = !sameItems(selectedDirect, originalDirect);
+
+  // -----------------------------------
+  // TOGGLE ROLE
+  // -----------------------------------
 
   function toggleRole(id) {
     setSelectedRoles((previous) =>
@@ -266,66 +399,105 @@ export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
     );
   }
 
-  function toggleDirectPermission(id) {
-    setSelectedDirectPermissions((previous) =>
-      previous.includes(id)
-        ? previous.filter((value) => value !== id)
-        : [...previous, id],
+  // -----------------------------------
+  // TOGGLE DIRECT PERMISSION
+  // -----------------------------------
+
+  function toggleDirectPermission(name) {
+    setSelectedDirect((previous) =>
+      previous.includes(name)
+        ? previous.filter((value) => value !== name)
+        : [...previous, name],
     );
   }
 
-  /**
-   * Save roles and close the dialog.
-   */
+  // -----------------------------------
+  // SAVE ROLES
+  // -----------------------------------
+
   async function saveRoles() {
-    if (busy || loading || loadFailed || unmanageableRole || !rolesChanged) {
+    if (
+      busy ||
+      loading ||
+      loadFailed ||
+      !canManageRoles ||
+      cannotManageTarget ||
+      lockedAssignedRole ||
+      !rolesChanged
+    ) {
       return;
     }
 
     setSaving("roles");
-    errorNotice.clear();
+    clearError();
 
     try {
       await usersApi.syncRoles(user.id, selectedRoles);
 
       onSaved("User roles updated successfully.");
+
+      // Close dialog on success.
       onClose();
     } catch (err) {
-      errorNotice.show(apiErrorMessage(err));
+      showError(apiErrorMessage(err));
     } finally {
       setSaving(null);
     }
   }
 
-  /**
-   * Save DIRECT permissions and close.
-   */
+  // -----------------------------------
+  // SAVE DIRECT PERMISSIONS
+  // -----------------------------------
+
   async function saveDirectPermissions() {
     if (
       busy ||
       loading ||
       loadFailed ||
-      unmanageableDirectPermission ||
+      !canManagePermissions ||
+      cannotManageTarget ||
+      lockedDirectPermission ||
       !permissionsChanged
     ) {
       return;
     }
 
+    // Convert selected permission names to IDs.
+    const permissionIds = selectedDirect.map(
+      (name) => permissionByName.get(name)?.id,
+    );
+
+    const invalidIds = permissionIds.some(
+      (id) => !Number.isInteger(id) || id <= 0,
+    );
+
+    if (invalidIds) {
+      showError(
+        "Some permissions could not be identified. Close and reopen the dialog.",
+      );
+      return;
+    }
+
     setSaving("permissions");
-    errorNotice.clear();
+    clearError();
 
     try {
-      await usersApi.syncPermissions(user.id, selectedDirectPermissions);
+      await usersApi.syncPermissions(user.id, permissionIds);
 
       onSaved("Direct permissions updated successfully.");
 
+      // Close dialog on success.
       onClose();
     } catch (err) {
-      errorNotice.show(apiErrorMessage(err));
+      showError(apiErrorMessage(err));
     } finally {
       setSaving(null);
     }
   }
+
+  // -----------------------------------
+  // UI
+  // -----------------------------------
 
   return (
     <Modal
@@ -335,12 +507,13 @@ export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
       busy={busy}
     >
       <div className="space-y-6">
-        {errorNotice.message && (
+        {/* ERROR NOTIFICATION */}
+        {error && (
           <div
             role="alert"
             className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm leading-6 text-red-800"
           >
-            {errorNotice.message}
+            {error}
           </div>
         )}
 
@@ -350,12 +523,15 @@ export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
           </p>
         ) : loadFailed ? (
           <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-            Access information could not be loaded. Close this dialog and try
+            Access information could not be loaded. Close the dialog and try
             again.
           </div>
         ) : (
           <>
-            {/* ASSIGNED ROLES */}
+            {/* ================================ */}
+            {/* ASSIGNED ROLES                   */}
+            {/* ================================ */}
+
             <section>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h3 className="flex items-center gap-2 font-semibold">
@@ -368,194 +544,229 @@ export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
                 </span>
               </div>
 
-              {canManageRoles ? (
-                <>
-                  <div className="max-h-52 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
-                    {assignableRoles.length ? (
-                      assignableRoles.map((role) => {
-                        const id = Number(role.id);
+              <div className="max-h-52 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
+                {visibleRoles.length ? (
+                  visibleRoles.map((role) => {
+                    const checked = selectedRoles.includes(role.id);
 
-                        return (
-                          <label
-                            key={role.id}
-                            className="flex cursor-pointer items-center gap-3 rounded-lg p-3 hover:bg-slate-50"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedRoles.includes(id)}
-                              onChange={() => toggleRole(id)}
-                              disabled={busy || unmanageableRole}
-                              className="h-4 w-4 accent-[#8A0007]"
-                            />
+                    const editable = canEditRole(role) && !cannotManageTarget;
 
-                            <span className="text-sm text-slate-700">
-                              {role.name}
-                            </span>
-                          </label>
-                        );
-                      })
-                    ) : (
-                      <p className="p-3 text-sm text-slate-500">
-                        No assignable roles available.
-                      </p>
-                    )}
-                  </div>
+                    return (
+                      <label
+                        key={role.id}
+                        className="flex items-center gap-3 rounded-lg p-3 hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleRole(role.id)}
+                          disabled={busy || !editable}
+                          className="h-4 w-4 accent-[#8A0007]"
+                        />
 
-                  {unmanageableRole && (
-                    <p className="mt-2 text-xs leading-5 text-amber-800">
-                      This user has a protected or non-delegatable role. You
-                      cannot replace their role assignments.
-                    </p>
-                  )}
+                        <span className="min-w-0 flex-1 text-sm text-slate-700">
+                          {role.name}
+                        </span>
 
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={saveRoles}
-                      disabled={busy || !rolesChanged || unmanageableRole}
-                      className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-deep disabled:opacity-50"
-                    >
-                      {saving === "roles" ? "Saving..." : "Save roles"}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  You cannot modify role assignments.
+                        {!editable && (
+                          <span className="text-xs text-slate-400">
+                            {role.name.toLowerCase() === "super admin"
+                              ? "Protected"
+                              : "Restricted"}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className="p-3 text-sm text-slate-500">
+                    No roles available.
+                  </p>
+                )}
+              </div>
+
+              {lockedAssignedRole && (
+                <p className="mt-3 text-xs leading-5 text-amber-800">
+                  An assigned role is protected or outside your authority. It
+                  remains visible but cannot be changed.
                 </p>
+              )}
+
+              {cannotManageTarget && (
+                <p className="mt-3 text-xs leading-5 text-amber-800">
+                  You cannot modify this account with your current access.
+                </p>
+              )}
+
+              {canManageRoles && (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={saveRoles}
+                    disabled={
+                      busy ||
+                      !rolesChanged ||
+                      lockedAssignedRole ||
+                      cannotManageTarget
+                    }
+                    className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-deep disabled:opacity-50"
+                  >
+                    {saving === "roles" ? "Saving..." : "Save roles"}
+                  </button>
+                </div>
               )}
             </section>
 
-            {/* INHERITED ROLE PERMISSIONS */}
-            {canManageRoles && (
-              <section className="border-t border-slate-100 pt-5">
-                <h3 className="mb-2 flex items-center gap-2 font-semibold">
-                  <ShieldCheck size={20} className="text-brand" />
-                  Permissions from roles
-                </h3>
+            {/* ================================ */}
+            {/* PERMISSIONS FROM ROLES           */}
+            {/* ================================ */}
 
-                <p className="mb-3 text-xs leading-5 text-slate-500">
-                  These permissions are inherited automatically from selected
-                  roles. They are not direct permissions.
-                </p>
+            <section className="border-t border-slate-100 pt-5">
+              <h3 className="mb-2 flex items-center gap-2 font-semibold">
+                <ShieldCheck size={20} className="text-brand" />
+                Permissions from roles
+              </h3>
 
-                <div className="max-h-56 space-y-3 overflow-y-auto rounded-xl border border-slate-200 p-3">
-                  {inheritedByRole.length ? (
-                    inheritedByRole.map((role) => (
-                      <div key={role.id} className="rounded-lg bg-slate-50 p-3">
-                        <p className="mb-2 text-sm font-semibold text-slate-800">
-                          {role.name}
+              <p className="mb-3 text-xs leading-5 text-slate-500">
+                These permissions are inherited automatically from selected
+                roles. They are not direct permissions.
+              </p>
+
+              <div className="max-h-56 space-y-3 overflow-y-auto rounded-xl border border-slate-200 p-3">
+                {inheritedByRole.length ? (
+                  inheritedByRole.map((role) => (
+                    <div key={role.id} className="rounded-lg bg-slate-50 p-3">
+                      <p className="mb-2 text-sm font-semibold text-slate-800">
+                        {role.name}
+                      </p>
+
+                      {role.name.toLowerCase() === "super admin" ? (
+                        <p className="text-xs text-slate-600">
+                          Full system access
                         </p>
-
-                        {role.permissions.length ? (
-                          <div className="flex flex-wrap gap-1.5">
-                            {role.permissions.map((permission) => (
-                              <span
-                                key={permission.id}
-                                className="rounded-md bg-white px-2.5 py-1.5 text-xs text-slate-700 ring-1 ring-slate-200"
-                              >
-                                {permission.name}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-500">
-                            No permissions in this role.
-                          </p>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">
-                      No inherited role permissions.
-                    </p>
-                  )}
-                </div>
-              </section>
-            )}
-
-            {/* DIRECT PERMISSIONS */}
-            {canManagePermissions && (
-              <section className="border-t border-slate-100 pt-5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="flex items-center gap-2 font-semibold">
-                    <KeyRound size={20} className="text-brand" />
-                    Direct permissions
-                  </h3>
-
-                  <span className="text-xs text-slate-500">
-                    {selectedDirectPermissions.length} selected
-                  </span>
-                </div>
-
-                <p className="mb-3 text-xs leading-5 text-slate-500">
-                  Only permissions directly assigned to the user are checked
-                  here. Role-inherited-only permissions are displayed above.
-                </p>
-
-                <div className="relative mb-3">
-                  <Search
-                    size={17}
-                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
-
-                  <input
-                    type="search"
-                    aria-label="Search direct permissions"
-                    value={permissionSearch}
-                    onChange={(event) =>
-                      setPermissionSearch(event.target.value)
-                    }
-                    placeholder="Search direct permissions..."
-                    className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-red-100"
-                  />
-                </div>
-
-                <div className="max-h-60 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
-                  {visibleDirectPermissions.length ? (
-                    visibleDirectPermissions.map((permission) => {
-                      const id = Number(permission.id);
-
-                      const alsoInherited = inheritedNames.has(permission.name);
-
-                      return (
-                        <label
-                          key={permission.id}
-                          className="flex cursor-pointer items-center gap-3 rounded-lg p-3 hover:bg-slate-50"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedDirectPermissions.includes(id)}
-                            onChange={() => toggleDirectPermission(id)}
-                            disabled={busy || unmanageableDirectPermission}
-                            className="h-4 w-4 shrink-0 accent-[#8A0007]"
-                          />
-
-                          <span className="min-w-0 flex-1 break-all text-sm text-slate-700">
-                            {permission.name}
-                          </span>
-
-                          {alsoInherited && (
-                            <span className="text-xs text-slate-400">
-                              Also inherited
+                      ) : role.permissions?.length ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {role.permissions.map((permission) => (
+                            <span
+                              key={permission.id}
+                              className="rounded-md bg-white px-2.5 py-1.5 text-xs text-slate-700 ring-1 ring-slate-200"
+                            >
+                              {permission.name}
                             </span>
-                          )}
-                        </label>
-                      );
-                    })
-                  ) : (
-                    <p className="p-3 text-sm text-slate-500">
-                      No direct permission options match your search.
-                    </p>
-                  )}
-                </div>
-
-                {unmanageableDirectPermission && (
-                  <p className="mt-2 text-xs text-amber-800">
-                    This user has direct permissions outside your authority.
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500">
+                          No permissions assigned to this role.
+                        </p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No inherited role permissions.
                   </p>
                 )}
+              </div>
+            </section>
 
+            {/* ================================ */}
+            {/* DIRECT PERMISSIONS               */}
+            {/* ================================ */}
+
+            <section className="border-t border-slate-100 pt-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  <KeyRound size={20} className="text-brand" />
+                  Direct permissions
+                </h3>
+
+                <span className="text-xs text-slate-500">
+                  {selectedDirect.length} selected
+                </span>
+              </div>
+
+              <p className="mb-3 text-xs leading-5 text-slate-500">
+                Only directly assigned permissions are checked here. Permissions
+                inherited only from roles are displayed above.
+              </p>
+
+              {/* SEARCH */}
+              <div className="relative mb-3">
+                <Search
+                  size={17}
+                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  type="search"
+                  aria-label="Search direct permissions"
+                  value={permissionSearch}
+                  onChange={(event) => setPermissionSearch(event.target.value)}
+                  placeholder="Search direct permissions..."
+                  className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-red-100"
+                />
+              </div>
+
+              {/* PERMISSION CHECKBOXES */}
+              <div className="max-h-60 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
+                {visibleDirectPermissions.length ? (
+                  visibleDirectPermissions.map((permission) => {
+                    const checked = selectedDirect.includes(permission.name);
+
+                    const editable =
+                      canEditPermission(permission) && !cannotManageTarget;
+
+                    const alsoInherited = inheritedNames.has(permission.name);
+
+                    return (
+                      <label
+                        key={permission.name}
+                        className="flex items-center gap-3 rounded-lg p-3 hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            toggleDirectPermission(permission.name)
+                          }
+                          disabled={busy || !editable}
+                          className="h-4 w-4 shrink-0 accent-[#8A0007]"
+                        />
+
+                        <span className="min-w-0 flex-1 break-all text-sm text-slate-700">
+                          {permission.name}
+                        </span>
+
+                        {alsoInherited && (
+                          <span className="text-xs text-slate-400">
+                            Also inherited
+                          </span>
+                        )}
+
+                        {!editable && (
+                          <span className="text-xs text-slate-400">
+                            Restricted
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className="p-3 text-sm text-slate-500">
+                    No direct permissions to display.
+                  </p>
+                )}
+              </div>
+
+              {lockedDirectPermission && (
+                <p className="mt-3 text-xs leading-5 text-amber-800">
+                  Some existing direct permissions are outside your authority.
+                  They cannot be modified.
+                </p>
+              )}
+
+              {canManagePermissions && (
                 <div className="mt-3 flex justify-end">
                   <button
                     type="button"
@@ -563,7 +774,8 @@ export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
                     disabled={
                       busy ||
                       !permissionsChanged ||
-                      unmanageableDirectPermission
+                      lockedDirectPermission ||
+                      cannotManageTarget
                     }
                     className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-deep disabled:opacity-50"
                   >
@@ -572,14 +784,31 @@ export default function UserAccessDialog({ user, actor, onClose, onSaved }) {
                       : "Save direct permissions"}
                   </button>
                 </div>
-              </section>
-            )}
+              )}
+            </section>
+
+            {/* ================================ */}
+            {/* PROFILE EDITING ACCESS           */}
+            {/* SUPER ADMIN ONLY                 */}
+            {/* ================================ */}
+
+            {isSuperAdmin &&
+              latestUser &&
+              !latestUser.is_super_admin &&
+              Number(latestUser.id) !== Number(actor?.id) && (
+                <ProfileEditAccess
+                  user={latestUser}
+                  onSaved={onSaved}
+                  onClose={onClose}
+                />
+              )}
           </>
         )}
 
+        {/* FOOTER */}
         <p className="border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">
-          Laravel validates every role and permission assignment. Changes take
-          effect after saving.
+          Laravel validates all role and permission assignments. Profile editing
+          access is controlled separately by Super Admin.
         </p>
       </div>
     </Modal>
