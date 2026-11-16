@@ -13,6 +13,7 @@ import {
   X,
   Layers3,
   LogOut,
+  Monitor,
 } from "lucide-react";
 
 import UniversityMark from "../components/UniversityMark";
@@ -51,6 +52,20 @@ const navigation = [
     icon: Layers3,
     permission: "categories.view",
   },
+
+  {
+    label: "My Systems",
+    path: "/my-systems",
+    icon: Monitor,
+    permission: null,
+  },
+  {
+    label: "Systems",
+    path: "/systems",
+    icon: Layers3,
+    permission: "systems.view",
+  },
+
   {
     label: "My Profile",
     path: "/profile",

@@ -13,6 +13,12 @@ use App\Http\Controllers\Api\ProfileAccessController;
 use App\Http\Controllers\Api\CategoryTypeController;
 use App\Http\Controllers\Api\CategoryController;
 
+
+use App\Http\Controllers\Api\SystemController;
+use App\Http\Controllers\Api\SystemCategoryController;
+use App\Http\Controllers\Api\SystemMemberController;
+
+
 Route::middleware('auth:sanctum')->group(function () {
 
     /*
@@ -217,4 +223,99 @@ Route::middleware('auth:sanctum')->group(function () {
         CategoryController::class,
         'destroy',
     ])->middleware('can:categories.delete');
+
+
+    /*
+|--------------------------------------------------------------------------
+| My Systems — All authenticated users
+|--------------------------------------------------------------------------
+*/
+
+    Route::get('/my-systems', [
+        SystemController::class,
+        'mySystems',
+    ]);
+
+    /*
+|--------------------------------------------------------------------------
+| System Management
+|--------------------------------------------------------------------------
+*/
+
+    Route::get('/systems', [
+        SystemController::class,
+        'index',
+    ])->middleware('can:systems.view');
+
+    Route::post('/systems', [
+        SystemController::class,
+        'store',
+    ])->middleware('can:systems.create');
+
+    Route::get('/systems/{system}', [
+        SystemController::class,
+        'show',
+    ])->middleware('can:systems.view');
+
+    Route::patch('/systems/{system}', [
+        SystemController::class,
+        'update',
+    ])->middleware('can:systems.update');
+
+    Route::delete('/systems/{system}', [
+        SystemController::class,
+        'destroy',
+    ])->middleware('can:systems.delete');
+
+    /*
+|--------------------------------------------------------------------------
+| System Categories
+|--------------------------------------------------------------------------
+*/
+
+    Route::get('/systems/{system}/categories', [
+        SystemCategoryController::class,
+        'index',
+    ]);
+
+    Route::post('/systems/{system}/categories', [
+        SystemCategoryController::class,
+        'store',
+    ])->middleware('can:system_categories.create');
+
+    Route::patch('/systems/{system}/categories/{category}', [
+        SystemCategoryController::class,
+        'update',
+    ])->middleware('can:system_categories.update');
+
+    Route::delete('/systems/{system}/categories/{category}', [
+        SystemCategoryController::class,
+        'destroy',
+    ])->middleware('can:system_categories.delete');
+
+    /*
+|--------------------------------------------------------------------------
+| System Members and System Heads
+|--------------------------------------------------------------------------
+*/
+
+    Route::get('/system-user-candidates', [
+        SystemMemberController::class,
+        'candidates',
+    ])->middleware('can:systems.members.assign');
+
+    Route::get('/systems/{system}/members', [
+        SystemMemberController::class,
+        'index',
+    ])->middleware('can:systems.members.view');
+
+    Route::put('/systems/{system}/members/{user}', [
+        SystemMemberController::class,
+        'upsert',
+    ])->middleware('can:systems.members.assign');
+
+    Route::delete('/systems/{system}/members/{user}', [
+        SystemMemberController::class,
+        'destroy',
+    ])->middleware('can:systems.members.assign');
 });

@@ -7,6 +7,9 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
+
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
 use LogicException;
 
 class User extends Authenticatable
@@ -62,5 +65,37 @@ class User extends Authenticatable
     {
         return (bool) $this->profile_edit_enabled
             && $this->can('profile.update');
+    }
+
+
+    /**
+     * All systems assigned to this user.
+     */
+    public function systems(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            System::class,
+            'system_user'
+        )
+            ->withPivot('is_head')
+            ->withTimestamps();
+    }
+
+    /**
+     * Systems for which this user is
+     * specifically designated as a head.
+     *
+     * Having this relationship alone does not
+     * grant the global System Head role.
+     */
+    public function headedSystems(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            System::class,
+            'system_user'
+        )
+            ->withPivot('is_head')
+            ->wherePivot('is_head', true)
+            ->withTimestamps();
     }
 }

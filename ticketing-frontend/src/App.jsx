@@ -16,6 +16,9 @@ import PermissionsPage from "./features/permissions/PermissionsPage";
 import CategoriesPage from "./features/categories/CategoriesPage";
 import ProfilePage from "./features/profile/ProfilePage";
 
+import SystemsPage from "./features/systems/SystemsPage";
+import MySystemsPage from "./features/systems/MySystemsPage";
+
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
 
@@ -83,6 +86,19 @@ export default function App() {
             element={
               <PermissionRoute permission="categories.view">
                 <CategoriesPage />
+              </PermissionRoute>
+            }
+          />
+
+          {/* All logged-in users */}
+          <Route path="my-systems" element={<MySystemsPage />} />
+
+          {/* Authorized system administrators */}
+          <Route
+            path="systems"
+            element={
+              <PermissionRoute permission="systems.view">
+                <SystemsPage />
               </PermissionRoute>
             }
           />
