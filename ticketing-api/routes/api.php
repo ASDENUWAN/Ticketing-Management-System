@@ -19,6 +19,9 @@ use App\Http\Controllers\Api\SystemCategoryController;
 use App\Http\Controllers\Api\SystemMemberController;
 
 
+use App\Http\Controllers\Api\TicketController;
+use App\Http\Controllers\Api\TicketAttachmentController;
+
 Route::middleware('auth:sanctum')->group(function () {
 
     /*
@@ -318,4 +321,48 @@ Route::middleware('auth:sanctum')->group(function () {
         SystemMemberController::class,
         'destroy',
     ])->middleware('can:systems.members.assign');
+
+
+    /*
+|--------------------------------------------------------------------------
+| Requester Ticket Management
+|--------------------------------------------------------------------------
+|
+| All authenticated users can create Personal
+| tickets for their assigned active systems.
+|
+| Change Request authorization is enforced
+| inside TicketController.
+|
+*/
+
+    Route::get('/tickets/create-options', [
+        TicketController::class,
+        'createOptions',
+    ]);
+
+    Route::get('/tickets/system-categories', [
+        TicketController::class,
+        'systemCategories',
+    ]);
+
+    Route::post('/tickets', [
+        TicketController::class,
+        'store',
+    ]);
+
+    Route::get('/my-tickets', [
+        TicketController::class,
+        'myTickets',
+    ]);
+
+    Route::get('/tickets/{ticket}', [
+        TicketController::class,
+        'show',
+    ]);
+
+    Route::get('/ticket-attachments/{attachment}', [
+        TicketAttachmentController::class,
+        'download',
+    ]);
 });

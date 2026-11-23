@@ -2,68 +2,81 @@
 
 namespace App\Http\Controllers\Api;
 
+
 use App\Http\Controllers\Controller;
 use App\Models\TicketAttachment;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TicketAttachmentController extends Controller
 {
-    /**
-     * GET /api/ticket-attachments/{attachment}
-     *
-     * Stage 1: only the ticket requester can
-     * download the attachment.
-     */
     public function download(
         Request $request,
         TicketAttachment $attachment
     ): StreamedResponse {
-        $attachment->load('ticket');
+
+        // Load ticket details.
+        $attachment->loadMissing('ticket');
 
         $ticket = $attachment->ticket;
 
+        // Only the ticket requester can download.
         abort_unless(
             $ticket &&
                 (int) $ticket->requester_id ===
                 (int) $request->user()->id,
-            404
+            404,
+            'Attachment not found.'
         );
 
-        // Stage 1 only stores private local files.
+        // Only private local storage.
         abort_unless(
             $attachment->disk === 'local',
             404
         );
 
+        /**
+         * Tell Intelephense the actual
+         * Laravel filesystem adapter type.
+         *
+         * @var FilesystemAdapter $disk
+         */
         $disk = Storage::disk('local');
 
+        $filePath = $attachment->file_path;
+
+        // Check that the file exists.
         abort_unless(
-            $disk->exists($attachment->file_path),
+            $disk->exists($filePath),
             404,
             'Attachment not found.'
         );
 
-        $stream = $disk->readStream($attachment->file_path);
+        // Use the original filename, not the path.
+        $downloadName = basename(
+            str_replace(
+                '\\',
+                '/',
+                (string) $attachment->original_name
+            )
+        );
 
-        abort_unless(is_resource($stream), 404, 'Attachment not found.');
+        $downloadName = preg_replace(
+            '/[\x00-\x1F\x7F]/',
+            '_',
+            $downloadName
+        ) ?: 'attachment';
 
-        return response()->streamDownload(
-            function () use ($stream): void {
-                fpassthru($stream);
-                fclose($stream);
-            },
-            $attachment->file_path,
+        // Secure private download.
+        return $disk->download(
+            $filePath,
+            $downloadName,
             [
-                'Content-Type' =>
-                'application/octet-stream',
-
-                'X-Content-Type-Options' =>
-                'nosniff',
-
-                'Cache-Control' =>
-                'private, no-store',
+                'Content-Type' => 'application/octet-stream',
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'private, no-store',
             ]
         );
     }
