@@ -45,9 +45,16 @@ class TicketAttachmentController extends Controller
             'Attachment not found.'
         );
 
-        return $disk->download(
+        $stream = $disk->readStream($attachment->file_path);
+
+        abort_unless(is_resource($stream), 404, 'Attachment not found.');
+
+        return response()->streamDownload(
+            function () use ($stream): void {
+                fpassthru($stream);
+                fclose($stream);
+            },
             $attachment->file_path,
-            $attachment->original_name,
             [
                 'Content-Type' =>
                 'application/octet-stream',
