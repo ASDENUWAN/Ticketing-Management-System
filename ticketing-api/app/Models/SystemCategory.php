@@ -5,6 +5,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SystemCategory extends Model
 {
@@ -30,6 +31,15 @@ class SystemCategory extends Model
     {
         return $this->belongsTo(
             System::class
+        );
+    }
+
+
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(
+            Ticket::class,
+            'system_category_id'
         );
     }
 }

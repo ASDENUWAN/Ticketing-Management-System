@@ -38,4 +38,12 @@ class System extends Model
             ->withPivot('is_head')
             ->withTimestamps();
     }
+
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(
+            Ticket::class,
+            'system_id'
+        );
+    }
 }

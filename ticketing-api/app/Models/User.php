@@ -10,6 +10,8 @@ use Spatie\Permission\Traits\HasRoles;
 
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
 use LogicException;
 
 class User extends Authenticatable
@@ -97,5 +99,17 @@ class User extends Authenticatable
             ->withPivot('is_head')
             ->wherePivot('is_head', true)
             ->withTimestamps();
+    }
+
+
+    /**
+     * Tickets submitted by this user.
+     */
+    public function requestedTickets(): HasMany
+    {
+        return $this->hasMany(
+            Ticket::class,
+            'requester_id'
+        );
     }
 }
